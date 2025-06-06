@@ -1,11 +1,21 @@
 // 给定一个向量文件，使用 hnswlib为其建立索引
 // 命令行参数：
 // --input: 输入的向量文件
-// --output: 输出的索引文件
 // --index: 索引类型（hnsw, brute）
-// --distance: 距离类型（l2, cosine, inner）(欧几里得距离，余弦距离，内积距离)
+// --distance: 距离类型（l2, cos, inner）(欧几里得距离，余弦距离，内积距离)
 // --dim: 向量维度
 // --threads: 线程数，默认为cpu核心数
+
+// 输出1:
+// 输出索引文件，文件名为 输入文件名 + ".index"
+
+// 输出2:
+// 索引文件元信息，文件名为 输入文件名 + ".meta"
+// 格式为：
+// index:索引类型
+// distance:距离类型
+// dim:向量维度
+
 
 // 输入的向量文件格式：
 // 每行一个向量，向量之间用,分隔
@@ -28,20 +38,18 @@
 
 void printUsage() {
     std::cout << "用法：" << std::endl;
-    std::cout << "--input: 输入的向量文件" << std::endl;
-    std::cout << "--output: 输出的索引文件" << std::endl;
-    std::cout << "--index: 索引类型（hnsw, brute）" << std::endl;
-    std::cout << "--distance: 距离类型（l2, cosine, inner）" << std::endl;
-    std::cout << "--dim: 向量维度" << std::endl;
+    std::cout << "--input=输入的向量文件" << std::endl;
+    std::cout << "--index=索引类型（hnsw, brute）" << std::endl;
+    std::cout << "--distance=距离类型（l2, cos, inner）" << std::endl;
+    std::cout << "--dim=向量维度" << std::endl;
     std::cout << "--threads: 线程数，默认为cpu核心数" << std::endl;
     std::cout << "示例：" << std::endl;
-    std::cout << "./build_index --input=./data.dim10.txt --output=data.dim10.index --index=hnsw --distance=cosine --dim=10 --threads 4" << std::endl;
+    std::cout << "./build_index --input=./data.dim10.txt --index=hnsw --distance=cos --dim=10 --threads=4" << std::endl;
 }
 
 int main(int argc, char** argv) {
     // 解析命令行参数
     std::string inputFile;
-    std::string outputFile;
     std::string indexType = "hnsw";
     std::string distanceType = "l2";
     int dim = 0;
@@ -49,7 +57,6 @@ int main(int argc, char** argv) {
 
     static struct option long_options[] = {
         {"input", required_argument, 0, 'i'},
-        {"output", required_argument, 0, 'o'},
         {"index", required_argument, 0, 'x'},
         {"distance", required_argument, 0, 'd'},
         {"dim", required_argument, 0, 'm'},
@@ -59,13 +66,10 @@ int main(int argc, char** argv) {
 
     int opt;
     int option_index = 0;
-    while ((opt = getopt_long(argc, argv, "i:o:x:d:m:t:", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:x:d:m:t:", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'i':
                 inputFile = optarg;
-                break;
-            case 'o':
-                outputFile = optarg;
                 break;
             case 'x':
                 indexType = optarg;
@@ -86,8 +90,8 @@ int main(int argc, char** argv) {
     }
 
     // 检查必需参数
-    if (inputFile.empty() || outputFile.empty() || dim <= 0) {
-        std::cerr << "错误：必须指定输入文件、输出文件和维度！" << std::endl;
+    if (inputFile.empty() || dim <= 0) {
+        std::cerr << "错误：必须指定输入文件和维度！" << std::endl;
         printUsage();
         return 1;
     }
@@ -97,14 +101,19 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (distanceType != "l2" && distanceType != "cosine" && distanceType != "inner") {
-        std::cerr << "错误：距离类型必须是 l2、cosine 或 inner" << std::endl;
+    if (distanceType != "l2" && distanceType != "cos" && distanceType != "inner") {
+        std::cerr << "错误：距离类型必须是 l2、cos 或 inner" << std::endl;
         return 1;
     }
 
+    // 自动生成输出文件名
+    std::string outputFile = inputFile + ".index";
+    std::string metaFile = inputFile + ".meta";
+
     std::cout << "参数：" << std::endl;
     std::cout << "  输入文件: " << inputFile << std::endl;
-    std::cout << "  输出文件: " << outputFile << std::endl;
+    std::cout << "  输出索引文件: " << outputFile << std::endl;
+    std::cout << "  输出元信息文件: " << metaFile << std::endl;
     std::cout << "  索引类型: " << indexType << std::endl;
     std::cout << "  距离类型: " << distanceType << std::endl;
     std::cout << "  维度: " << dim << std::endl;
@@ -148,7 +157,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<hnswlib::SpaceInterface<float>> space;
     if (distanceType == "l2") {
         space.reset(new hnswlib::L2Space(dim));
-    } else if (distanceType == "cosine") {
+    } else if (distanceType == "cos") {
         space.reset(new hnswlib::InnerProductSpace(dim));
     } else if (distanceType == "inner") {
         space.reset(new hnswlib::InnerProductSpace(dim));
@@ -187,6 +196,20 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "索引已保存到：" << outputFile << std::endl;
+
+    // 保存元信息文件
+    std::ofstream metaOut(metaFile);
+    if (!metaOut.is_open()) {
+        std::cerr << "无法创建元信息文件：" << metaFile << std::endl;
+        return 1;
+    }
+    
+    metaOut << "index:" << indexType << std::endl;
+    metaOut << "distance:" << distanceType << std::endl;
+    metaOut << "dim:" << dim << std::endl;
+    metaOut.close();
+    
+    std::cout << "元信息已保存到：" << metaFile << std::endl;
 
     return 0;
 }
