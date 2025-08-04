@@ -2,3 +2,5 @@ generate_data
 data.dim10.txt.*
 build_index
 search
+*.bin
+test_hnsw
